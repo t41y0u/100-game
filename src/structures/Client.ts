@@ -1,11 +1,12 @@
 import { AkairoClient, CommandHandler, ListenerHandler, InhibitorHandler } from 'discord-akairo';
-import { Command, Embeds, Inhibitor, Listener, Logger, Util } from './index';
+import { Command, Embeds, Inhibitor, Listener, Logger, Game, Util } from './index';
 const { DISCORD_TOKEN, PREFIX } = process.env;
 
 export class Client extends AkairoClient {
     public embeds: Embeds;
     public util: Util;
     public logger: Logger;
+    public game: Game;
     public commandHandler: CommandHandler;
     public listenerHandler: ListenerHandler;
     public inhibitorHandler: InhibitorHandler;
