@@ -139,14 +139,21 @@ export class Game {
     }
 
     pause() {
+        if (this.pausing) {
+            return this.channel.send('The game is already paused.');
+        }
         this.pausing = true;
         this.timer.pause();
         this.channel.send('Paused.');
     }
 
     continue() {
+        if (!this.pausing) {
+            return this.channel.send("The game hasn't been paused yet.");
+        }
         this.pausing = false;
         this.timer.resume();
+        this.channel.send('Continuing.');
     }
 
     async collectBets() {

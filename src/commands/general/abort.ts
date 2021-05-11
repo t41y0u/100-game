@@ -13,6 +13,9 @@ export default class extends Command {
     }
 
     async exec(message: Message) {
+        if (!this.client.game || this.client.game.ended) {
+            return message.channel.send("There's no ongoing game to abort.");
+        }
         this.client.game.abort();
     }
 }
