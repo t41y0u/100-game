@@ -66,6 +66,7 @@ export class Game {
     public time: number;
     public rounds: number;
     public channel: TextChannel;
+    public ended: boolean;
     private round: number;
     private users: User[];
     private timer: Timer;
@@ -80,6 +81,7 @@ export class Game {
         this.time = time;
         this.timer = new Timer();
         this.pausing = false;
+        this.ended = false;
         this.leaderboard = new Collection();
         this.users = [];
     }
@@ -136,6 +138,7 @@ export class Game {
     abort(showScore = false) {
         this.timer.pause();
         this.channel.send('The game has been aborted.');
+        this.ended = true;
     }
 
     pause() {
@@ -249,10 +252,14 @@ export class Game {
         );
         const winner = this.leaderboard.first() >= 100;
         if (winner) {
-            await this.channel.send(
-                `Congratulations! The winner is: ${this.leaderboard.firstKey()} with ${this.leaderboard.first()} points!`
-            );
-            return;
+            this.ended = true;
+            const firstPlase = this.leaderboard.first();
+            const winners = this.leaderboard.filter(s => s === firstPlase).array();
+            let congrats = `Congratulations! The winner`;
+            if (winners.length > 1)
+                congrats += `s are: ${winners.join(', ')} with ${firstPlase} points!`;
+            else congrats += ` is: ${this.leaderboard.firstKey()} with ${firstPlase} points!`;
+            return this.channel.send(congrats);
         }
         await this.channel.send('=================================');
         this.timer.reset(() => {
@@ -263,9 +270,15 @@ export class Game {
 
     play() {
         if (this.round >= 5) {
-            return this.channel.send(
-                `Congratulations! The winner is: ${this.leaderboard.firstKey()} with ${this.leaderboard.first()} points!`
-            );
+            this.ended = true;
+            const firstPlase = this.leaderboard.first();
+            if (firstPlase === 0) return this.channel.send('Unfortunately, no one won. Sadge');
+            const winners = this.leaderboard.filter(s => s === firstPlase).array();
+            let congrats = `Congratulations! The winner`;
+            if (winners.length > 1)
+                congrats += `s are: ${winners.join(', ')} with ${firstPlase} points!`;
+            else congrats += ` is: ${this.leaderboard.firstKey()} with ${firstPlase} points!`;
+            return this.channel.send(congrats);
         }
         this.timer.reset(() => {
             this.collectBets();
