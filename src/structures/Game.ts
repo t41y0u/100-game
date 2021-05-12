@@ -241,7 +241,7 @@ export class Game {
             const [start, end] = b;
             if (start <= number && number <= end) {
                 const cur = this.leaderboard.get(u);
-                this.leaderboard.set(u, cur + 100 - (end - start + 1));
+                this.leaderboard.set(u, cur + 100 - (end - start));
             }
         });
         this.leaderboard.sort((a, b) => b - a);
