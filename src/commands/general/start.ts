@@ -1,6 +1,7 @@
 import { Command } from '@structures';
 import { Message, TextChannel } from 'discord.js';
 import { Game } from '@structures';
+import { MODES } from '@utils/constants';
 
 export default class extends Command {
     constructor() {
@@ -10,14 +11,23 @@ export default class extends Command {
                 content: 'Starts a 100-game',
                 examples: ['\nMay the luckiest one wins.'],
             },
+            args: [
+                {
+                    id: 'mode',
+                    match: 'option',
+                    type: ['classic', 'unlimited'],
+                    flag: ['mode:', 'm:'],
+                    default: 'classic',
+                },
+            ],
         });
     }
 
-    async exec(message: Message) {
+    async exec(message: Message, { mode }: { mode: MODES }) {
         if (this.client.game && !this.client.game.ended) {
             return message.channel.send("There's already an ongoing game. Please wait until the current game ended or abort it.");
         }
-        this.client.game = new Game(this.client, message.channel as TextChannel);
+        this.client.game = new Game(this.client, message.channel as TextChannel, mode);
         this.client.game.start(message);
     }
 }

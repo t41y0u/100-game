@@ -10,6 +10,11 @@ export const PERMISSIONS = <const>[
 
 export const ICON = 'https://i.imgur.com/cGT4RMd.png';
 
+export enum MODES {
+    Classic = 'classic',
+    Unlimited = 'unlimited'
+};
+
 export const RULES = `1. Each turn all players will have 30 seconds to declare a range from 0 to 100.
 2. **The declare message has to follow the format '[start, end]' and contains nothing else**.
 3. The bot then rolls a random number between 0 and 100.

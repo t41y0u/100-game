@@ -8,7 +8,7 @@ import {
     ReactionCollector,
     MessageCollector,
 } from 'discord.js';
-import { RULES } from '@utils/constants';
+import { MODES, RULES } from '@utils/constants';
 const { PREFIX } = process.env;
 
 class Timer {
@@ -64,6 +64,7 @@ class Timer {
 
 export class Game {
     public client: Client;
+    public mode: MODES;
     public time: number;
     public rounds: number;
     public channel: TextChannel;
@@ -71,17 +72,20 @@ export class Game {
     private round: number;
     private users: User[];
     private timer: Timer;
+    private started: boolean;
     private pausing: boolean;
     private bets: Collection<User, Array<number>>;
     private leaderboard: Collection<User, number>;
     private regex = /^\[([0-9]{1,3}|r), ([0-9]{1,3}|r)\]$/;
-    constructor(client: Client, channel: TextChannel, rounds = 5, time = 30000) {
+    constructor(client: Client, channel: TextChannel, mode = MODES.Classic, rounds = 5, time = 30000) {
         this.client = client;
+        this.mode = mode;
         this.rounds = rounds;
         this.channel = channel;
         this.time = time;
         this.round = 0;
         this.timer = new Timer();
+        this.started = false;
         this.pausing = false;
         this.ended = false;
         this.leaderboard = new Collection();
@@ -93,7 +97,9 @@ export class Game {
             this.client.embeds
                 .default()
                 .setDescription(
-                    `${starter} started a 100-game! You have 30 seconds to react ✅ to this message to participate. Check out ${PREFIX}rules or hover over [here](https://bit.ly/3tE6MgR "${RULES}") if you don't know the rules yet.`
+                    `${starter} started a${
+                        this.mode === MODES.Unlimited ? 'n unlimited' : ''
+                    } 100-game! You have 30 seconds to react ✅ to this message to participate. Check out ${PREFIX}rules or hover over [here](https://bit.ly/3tE6MgR "${RULES}") if you don't know the rules yet.`
                 )
         );
         message.react('✅');
@@ -130,14 +136,20 @@ export class Game {
                     )
             );
         }
+        if (this.users.length > 10) {
+            this.users = this.users.slice(0, 10);
+        }
         if (this.users.length > 2) {
             this.users = this.users.filter(u => u.id !== this.client.user.id);
         }
         this.channel.send(
             this.client.embeds
                 .default()
+                .setTitle("Time's up!")
                 .setDescription(
-                    `Time's up! ${this.users.join(', ')} will be the participants for this game!`
+                    `${this.users.join(
+                        ', '
+                    )} will be the participants for this game!\nIf you're not here, it means you've joined too late and/or the game already has 10 players.`
                 )
         );
         this.users.forEach(u => this.leaderboard.set(u, 0));
@@ -150,21 +162,22 @@ export class Game {
         await this.collectParticipants(message.author);
     }
 
-    abort(showScore = false) {
+    abort() {
         this.timer.pause();
-        this.channel.send(
-            this.client.embeds.default().setDescription('The game has been aborted.')
-        );
         this.ended = true;
+        this.channel.send(
+            this.client.embeds.default().setTitle('The game has been aborted.')
+        );
+        if (this.started && this.mode === MODES.Unlimited) this.announceLeaderboard();
     }
 
     pause() {
         if (this.pausing) {
             return this.channel.send(this.client.embeds.clientError('The game is already paused.'));
         }
-        this.pausing = true;
         this.timer.pause();
-        this.channel.send('Paused.');
+        this.pausing = true;
+        this.channel.send(this.client.embeds.default().setTitle('Paused.'));
     }
 
     continue() {
@@ -173,16 +186,16 @@ export class Game {
                 this.client.embeds.clientError("The game hasn't been paused yet.")
             );
         }
-        this.pausing = false;
         this.timer.resume();
-        this.channel.send('Continuing.');
+        this.pausing = false;
+        this.channel.send(this.client.embeds.default().setTitle('Continuing.'));
     }
 
     async collectBets() {
         this.channel.send(
             this.client.embeds
                 .default()
-                .setTitle(`Round #${this.round + 1} of ${this.rounds === -1 ? '?' : this.rounds}!`)
+                .setTitle(`Round #${this.round + 1} of ${this.mode === MODES.Unlimited ? '?' : this.rounds}`)
                 .setDescription(
                     `You have ${
                         this.time / 1000
@@ -268,12 +281,6 @@ export class Game {
         await message.channel.send(
             this.client.embeds.default().setTitle(`And the secret number is: ${number}!`)
         );
-        this.timer.reset(() => {
-            this.announceLeaderboard(number);
-        }, 1000);
-    }
-
-    async announceLeaderboard(number: number) {
         this.bets.forEach((b, u) => {
             const [start, end] = b;
             if (start <= number && number <= end) {
@@ -281,28 +288,40 @@ export class Game {
                 this.leaderboard.set(u, cur + 100 - (end - start));
             }
         });
+        this.timer.reset(() => {
+            this.announceLeaderboard();
+        }, 1000);
+    }
+
+    async announceLeaderboard() {
         this.leaderboard.sort((a, b) => b - a);
         const userList = this.leaderboard.keyArray();
         /* const leaderboard = this.leaderboard
             .array()
             .map((s, i) => `#${i + 1}. **${userList[i]}**: ${s} points. ${s >= 100 ? '👑' : ''}`)
             .join('\n'); */
-        const firstPlaces = this.leaderboard.filter(s => s === this.leaderboard.first()).array().length;
+        const firstPlaces = this.leaderboard
+            .filter(s => s === this.leaderboard.first())
+            .array().length;
         const leaderboard = this.client.util.presentTable([
             ['#', 'PLAYERS', 'POINTS'],
             ...this.leaderboard
                 .array()
-                .map((s, i) => [`${s >= 100 && i < firstPlaces ? '👑' : `${i + 1}`}`, userList[i].tag, `${s}`]),
+                .map((s, i) => [
+                    `${s >= 100 && i < firstPlaces && this.mode !== MODES.Unlimited ? '👑' : `${i + 1}`}`,
+                    userList[i].tag,
+                    `${s}`,
+                ]),
         ]);
         // await this.channel.send('=================================');
         await this.channel.send(
             this.client.embeds
                 .default()
-                .setTitle(`Here's the leaderboard after this round:`)
+                .setTitle(`Here's the leaderboard:`)
                 .setDescription(`\`\`\`${leaderboard}\`\`\``)
         );
         const winner = this.leaderboard.first() >= 100;
-        if (winner) {
+        if (winner && this.mode !== MODES.Unlimited) {
             this.ended = true;
             const firstPlase = this.leaderboard.first();
             const winners = this.leaderboard.filter(s => s === firstPlase).array();
@@ -310,8 +329,11 @@ export class Game {
             if (winners.length > 1)
                 congrats += `s are: ${winners.join(', ')} with ${firstPlase} points!`;
             else congrats += ` is: ${this.leaderboard.firstKey()} with ${firstPlase} points!`;
-            return this.channel.send(this.client.embeds.default().setTitle('Congratulations!').setDescription(congrats));
+            return this.channel.send(
+                this.client.embeds.default().setTitle('Congratulations!').setDescription(congrats)
+            );
         }
+        if (this.ended) return;
         // await this.channel.send('=================================');
         this.timer.reset(() => {
             this.round++;
@@ -320,19 +342,23 @@ export class Game {
     }
 
     play() {
-        if (this.round >= 5 || this.rounds === -1) {
+        this.started = true;
+        if (this.round >= this.rounds && this.mode !== MODES.Unlimited) {
             this.ended = true;
             const firstPlase = this.leaderboard.first();
-            if (firstPlase === 0)
+            if (firstPlase === 0) {
                 return this.channel.send(
                     this.client.embeds.default().setTitle('Unfortunately, no one won. Sadge')
                 );
+            }
             const winners = this.leaderboard.filter(s => s === firstPlase).array();
             let congrats = `The winner`;
             if (winners.length > 1)
                 congrats += `s are: ${winners.join(', ')} with ${firstPlase} points!`;
             else congrats += ` is: ${this.leaderboard.firstKey()} with ${firstPlase} points!`;
-            return this.channel.send(this.client.embeds.default().setTitle('Congratulations!').setDescription(congrats));
+            return this.channel.send(
+                this.client.embeds.default().setTitle('Congratulations!').setDescription(congrats)
+            );
         }
         this.timer.reset(() => {
             this.collectBets();
