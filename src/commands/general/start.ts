@@ -9,7 +9,11 @@ export default class extends Command {
             aliases: ['start', 'init'],
             description: {
                 content: 'Starts a 100-game',
-                examples: ['\nMay the luckiest one wins.'],
+                usage: '[mode:classic|unlimited|ur]',
+                examples: [
+                    '\nMay the luckiest one wins.',
+                    ' m:ur\nStarts an Ultimate Random game.'
+                ],
             },
             args: [
                 {
