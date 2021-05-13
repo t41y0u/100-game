@@ -62,9 +62,18 @@ class Timer {
     }
 }
 
+export interface GameOptions {
+    mode?: MODES;
+    range?: number;
+    winCondition?: number;
+    time?: number;
+    rounds?: number;
+}
 export class Game {
     public client: Client;
     public mode: MODES;
+    public range: number;
+    public winCondition: number;
     public time: number;
     public rounds: number;
     public channel: TextChannel;
@@ -77,12 +86,14 @@ export class Game {
     private bets: Collection<User, Array<number>>;
     private leaderboard: Collection<User, number>;
     private regex = /^\[([0-9]{1,3}|r), ([0-9]{1,3}|r)\]$/;
-    constructor(client: Client, channel: TextChannel, mode = MODES.Classic, rounds = 5, time = 30000) {
+    constructor(client: Client, channel: TextChannel, options: GameOptions) {
         this.client = client;
-        this.mode = mode;
-        this.rounds = rounds;
+        this.mode = options.mode ?? MODES.Classic;
+        this.range = options.range ?? 100;
+        this.winCondition = options.winCondition ?? 100;
+        this.rounds = options.rounds ?? 5;
+        this.time = options.time ?? 30000;
         this.channel = channel;
-        this.time = time;
         this.round = 0;
         this.timer = new Timer();
         this.started = false;
@@ -92,15 +103,19 @@ export class Game {
         this.users = [];
     }
 
+    random(start: number, end: number) {
+        return Math.floor(Math.random() * (end - start + 1) + start);
+    }
+
     async collectParticipants(starter: User) {
         const message = await this.channel.send(
-            this.client.embeds
-                .default()
-                .setDescription(
-                    `${starter} started a${
-                        this.mode === MODES.Unlimited ? 'n unlimited' : ''
-                    } 100-game! You have 30 seconds to react ✅ to this message to participate. Check out ${PREFIX}rules or hover over [here](https://bit.ly/3tE6MgR "${RULES}") if you don't know the rules yet.`
-                )
+            this.client.embeds.default().setDescription(
+                `${starter} started a ${Object.keys(MODES)
+                    [Object.values(MODES).indexOf(this.mode)].match(/[A-Z][a-z]+/g)
+                    .join(
+                        ' '
+                    )} 100-game! You have 30 seconds to react ✅ to this message to participate. Check out ${PREFIX}rules or hover over [here](https://bit.ly/3tE6MgR "${RULES}") if you don't know the rules yet.`
+            )
         );
         message.react('✅');
         const collector = message.createReactionCollector(
@@ -152,6 +167,11 @@ export class Game {
                     )} will be the participants for this game!\nIf you're not here, it means you've joined too late and/or the game already has 10 players.`
                 )
         );
+        this.channel.send(
+            this.client.embeds
+                .default()
+                .setTitle(`First player(s) to get to ${this.winCondition} wins.`)
+        );
         this.users.forEach(u => this.leaderboard.set(u, 0));
         this.timer.reset(() => {
             this.play();
@@ -159,15 +179,19 @@ export class Game {
     }
 
     async start(message: Message) {
+        this.winCondition =
+            this.mode === MODES.UltimateRandom
+                ? this.random(1, this.winCondition)
+                : this.winCondition;
+        this.rounds =
+            this.mode === MODES.UltimateRandom ? this.random(1, this.rounds) : this.rounds;
         await this.collectParticipants(message.author);
     }
 
     abort() {
         this.timer.pause();
         this.ended = true;
-        this.channel.send(
-            this.client.embeds.default().setTitle('The game has been aborted.')
-        );
+        this.channel.send(this.client.embeds.default().setTitle('The game has been aborted.'));
         if (this.started && this.mode === MODES.Unlimited) this.announceLeaderboard();
     }
 
@@ -195,11 +219,17 @@ export class Game {
         this.channel.send(
             this.client.embeds
                 .default()
-                .setTitle(`Round #${this.round + 1} of ${this.mode === MODES.Unlimited ? '?' : this.rounds}`)
+                .setTitle(
+                    `Round #${this.round + 1} of ${
+                        this.mode === MODES.Unlimited ? '?' : this.rounds
+                    }`
+                )
                 .setDescription(
                     `You have ${
                         this.time / 1000
-                    } seconds to place your bet.\n**Please remember that the declare message has to follow the format '[start, end]' and contains nothing else.**\nIf you want to randomize your bet, use the letter \`r\` (E.g: \`[r, 69]\`).\nUpon successfully receiving your bet, I will react to your message with a ✅.\nYou can change your bet anytime before the timer ends. Your last bet will be your final choice.`
+                    } seconds to place your bet. Your bet must be inside the range [0, ${
+                        this.range
+                    }].\n**Please remember that the declare message has to follow the format '[start, end]' and contains nothing else.**\nIf you want to randomize your bet, use the letter \`r\` (E.g: \`[r, 69]\`).\nUpon successfully receiving your bet, I will react to your message with a ✅.\nYou can change your bet anytime before the timer ends. Your last bet will be your final choice.`
                 )
         );
         this.bets = new Collection<User, Array<number>>();
@@ -211,13 +241,13 @@ export class Game {
                     end = +match[2];
                 if (isNaN(start)) {
                     if (isNaN(end)) {
-                        const f = Math.floor(Math.random() * 101);
-                        const s = Math.floor(Math.random() * 101);
+                        const f = this.random(0, this.range);
+                        const s = this.random(0, this.range);
                         (start = Math.min(f, s)), (end = Math.max(f, s));
                     }
-                    start = Math.floor(Math.random() * end);
+                    start = this.random(0, end);
                 } else if (isNaN(end)) {
-                    end = Math.floor(Math.random() * (101 - start) + start);
+                    end = this.random(start, this.range);
                 }
                 if (start < 0 || end > 100 || start > end) return false;
                 await m.react('✅');
@@ -234,7 +264,7 @@ export class Game {
             async () => {
                 await this.announceBets(collected);
             },
-            30000,
+            this.time,
             collector
         );
     }
@@ -244,16 +274,17 @@ export class Game {
             return this.channel.send('An unexpected error has occured.');
         }
         if (this.users.some(u => u.id === this.client.user.id)) {
-            const f = Math.floor(Math.random() * 101);
-            const s = Math.floor(Math.random() * 101);
+            const f = this.random(0, this.range);
+            const s = this.random(0, this.range);
             const start = Math.min(f, s),
                 end = Math.max(f, s);
             this.bets.set(this.client.user, [start, end]);
         }
         // const betsDisplay = this.bets.map((b, u) => `${u}: [${b.join(', ')}]`);
+        const userList = this.bets.keyArray();
         const betsDisplay = this.client.util.presentTable([
-            ['PLAYERS', 'BETS'],
-            ...this.bets.map((b, u) => [u.tag, `[${b.join(', ')}]`]),
+            ['#', 'PLAYERS', 'BETS'],
+            ...this.bets.array().map((b, i) => [`${i + 1}`, userList[i].tag, `[${b.join(', ')}]`]),
         ]);
         this.channel.send(
             this.client.embeds
@@ -276,7 +307,7 @@ export class Game {
     }
 
     async announceSecretNumber(message: Message) {
-        const number = Math.floor(Math.random() * 101);
+        const number = this.random(0, this.range);
         if (message.deletable) await message.delete();
         await message.channel.send(
             this.client.embeds.default().setTitle(`And the secret number is: ${number}!`)
@@ -285,7 +316,11 @@ export class Game {
             const [start, end] = b;
             if (start <= number && number <= end) {
                 const cur = this.leaderboard.get(u);
-                this.leaderboard.set(u, cur + 100 - (end - start));
+                const diff = this.range - (end - start);
+                this.leaderboard.set(
+                    u,
+                    cur + (this.mode === MODES.UltimateRandom ? this.random(0, diff) : diff)
+                );
             }
         });
         this.timer.reset(() => {
@@ -308,7 +343,11 @@ export class Game {
             ...this.leaderboard
                 .array()
                 .map((s, i) => [
-                    `${s >= 100 && i < firstPlaces && this.mode !== MODES.Unlimited ? '👑' : `${i + 1}`}`,
+                    `${i + 1} ${
+                        s >= this.winCondition && i < firstPlaces && this.mode !== MODES.Unlimited
+                            ? '(👑)'
+                            : ''
+                    }`,
                     userList[i].tag,
                     `${s}`,
                 ]),
@@ -320,7 +359,7 @@ export class Game {
                 .setTitle(`Here's the leaderboard:`)
                 .setDescription(`\`\`\`${leaderboard}\`\`\``)
         );
-        const winner = this.leaderboard.first() >= 100;
+        const winner = this.leaderboard.first() >= this.winCondition;
         if (winner && this.mode !== MODES.Unlimited) {
             this.ended = true;
             const firstPlase = this.leaderboard.first();
@@ -361,6 +400,10 @@ export class Game {
             );
         }
         this.timer.reset(() => {
+            if (this.mode === MODES.UltimateRandom) {
+                this.time = this.random(10, this.time / 1000) * 1000;
+                this.range = this.random(0, this.range);
+            }
             this.collectBets();
         }, 1000);
     }

@@ -12,15 +12,17 @@ export const ICON = 'https://i.imgur.com/cGT4RMd.png';
 
 export enum MODES {
     Classic = 'classic',
-    Unlimited = 'unlimited'
-};
+    Unlimited = 'unlimited',
+    UltimateRandom = 'ur',
+}
 
-export const RULES = `1. Each turn all players will have 30 seconds to declare a range from 0 to 100.
+export const RULES = `> Classic
+1. Each turn all players will have 30 seconds to declare a range from 0 to 100.
 2. **The declare message has to follow the format '[start, end]' and contains nothing else**.
 3. The bot then rolls a random number between 0 and 100.
 4. If the number rolled ends up inside the declared range of a player, that player receives \`100-(end-start)\` points.
-5. The first player to get to 100 points or the player with the highest amount of points after 5 rounds wins.`;
-
-export const PLAYER = '';
-
-export const PARTICIPANTS = '';
+5. The first player to get to 100 points or the player with the highest amount of points after 5 rounds wins.
+> Unlimited
+There's an unlimited number of rounds.
+> Ultimate Random
+Everything will be randomized between 0 and its default value, including range, points, and secret number. Time will be randomized between 10 seconds and default value.`;

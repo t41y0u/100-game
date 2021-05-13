@@ -1,6 +1,6 @@
 import { Command } from '@structures';
 import { Message } from 'discord.js';
-import { RULES } from '@utils/constants';
+import { MODES, RULES } from '@utils/constants';
 
 export default class extends Command {
     constructor() {
@@ -19,7 +19,9 @@ export default class extends Command {
                 .default()
                 .setTitle('⚔️ Race to 100 ⚔️')
                 .setDescription(
-                    `- **Number of players**: 1 - 10.\n- Modes: Classic, Unlimited\n- **Rules**:\n${RULES}`
+                    `- **Number of players**: 1 - 10.\n- **Modes**: ${Object.keys(MODES)
+                        .map(m => m.match(/[A-Z][a-z]+/g).join(' '))
+                        .join(', ')}\n- **Rules**:\n${RULES}`
                 )
         );
     }

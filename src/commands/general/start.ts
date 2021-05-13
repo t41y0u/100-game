@@ -15,7 +15,7 @@ export default class extends Command {
                 {
                     id: 'mode',
                     match: 'option',
-                    type: ['classic', 'unlimited'],
+                    type: ['classic', 'unlimited', 'ur'],
                     flag: ['mode:', 'm:'],
                     default: 'classic',
                 },
@@ -27,7 +27,7 @@ export default class extends Command {
         if (this.client.game && !this.client.game.ended) {
             return message.channel.send("There's already an ongoing game. Please wait until the current game ended or abort it.");
         }
-        this.client.game = new Game(this.client, message.channel as TextChannel, mode);
+        this.client.game = new Game(this.client, message.channel as TextChannel, { mode });
         this.client.game.start(message);
     }
 }
