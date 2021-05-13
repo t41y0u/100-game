@@ -18,7 +18,7 @@ export default class extends Command {
             this.client.embeds
                 .default()
                 .setTitle('⚔️ Race to 100 ⚔️')
-                .setDescription(`❯ **Number of players**: 1 - ∞.\n❯ **Rules**:\n${RULES}`)
+                .setDescription(`- **Number of players**: 1 - ∞.\n- **Rules**:\n${RULES}`)
         );
     }
 }

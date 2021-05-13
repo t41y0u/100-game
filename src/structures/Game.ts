@@ -8,6 +8,7 @@ import {
     ReactionCollector,
     MessageCollector,
 } from 'discord.js';
+import { RULES } from '@utils/constants';
 const { PREFIX } = process.env;
 
 class Timer {
@@ -78,8 +79,8 @@ export class Game {
         this.client = client;
         this.rounds = rounds;
         this.channel = channel;
-        this.round = 0;
         this.time = time;
+        this.round = 0;
         this.timer = new Timer();
         this.pausing = false;
         this.ended = false;
@@ -88,8 +89,13 @@ export class Game {
     }
 
     async collectParticipants(starter: User) {
-        let msg = `${starter} started a 100-game! You have 30 seconds to react ✅ to this message to participate. Check out ${PREFIX}rules if you don't know the rules yet.`;
-        const message = await this.channel.send(msg);
+        const message = await this.channel.send(
+            this.client.embeds
+                .default()
+                .setDescription(
+                    `${starter} started a 100-game! You have 30 seconds to react ✅ to this message to participate. Check out ${PREFIX}rules or hover over [here](https://bit.ly/3tE6MgR "${RULES}") if you don't know the rules yet.`
+                )
+        );
         message.react('✅');
         const collector = message.createReactionCollector(
             reaction => reaction.emoji.name === '✅',
@@ -117,14 +123,22 @@ export class Game {
         this.users = collected.first().users.cache.array();
         if (this.users.length <= 1) {
             return this.channel.send(
-                "Looks like there's not enough player. The game will not start."
+                this.client.embeds
+                    .default()
+                    .setDescription(
+                        "Looks like there's not enough player. The game will not start."
+                    )
             );
         }
         if (this.users.length > 2) {
             this.users = this.users.filter(u => u.id !== this.client.user.id);
         }
         this.channel.send(
-            `Time's up! ${this.users.join(', ')} will be the participants for this game!`
+            this.client.embeds
+                .default()
+                .setDescription(
+                    `Time's up! ${this.users.join(', ')} will be the participants for this game!`
+                )
         );
         this.users.forEach(u => this.leaderboard.set(u, 0));
         this.timer.reset(() => {
@@ -138,13 +152,15 @@ export class Game {
 
     abort(showScore = false) {
         this.timer.pause();
-        this.channel.send('The game has been aborted.');
+        this.channel.send(
+            this.client.embeds.default().setDescription('The game has been aborted.')
+        );
         this.ended = true;
     }
 
     pause() {
         if (this.pausing) {
-            return this.channel.send('The game is already paused.');
+            return this.channel.send(this.client.embeds.clientError('The game is already paused.'));
         }
         this.pausing = true;
         this.timer.pause();
@@ -153,7 +169,9 @@ export class Game {
 
     continue() {
         if (!this.pausing) {
-            return this.channel.send("The game hasn't been paused yet.");
+            return this.channel.send(
+                this.client.embeds.clientError("The game hasn't been paused yet.")
+            );
         }
         this.pausing = false;
         this.timer.resume();
@@ -162,9 +180,14 @@ export class Game {
 
     async collectBets() {
         this.channel.send(
-            `Round **#${this.round + 1}** of **${this.rounds}!**\nYou will have ${
-                this.time / 1000
-            } seconds to place your bet.\n**Please remember that the declare message has to follow the format '[start, end]' and contains nothing else.**\nIf you want to randomize your bet, use the letter \`r\` (E.g: \`[r, 69]\`).\nUpon successfully receiving your bet, I will react to your message with a ✅.\nYou can change your bet anytime before the timer ends. Your last bet will be your final choice.`
+            this.client.embeds
+                .default()
+                .setTitle(`Round #${this.round + 1} of ${this.rounds === -1 ? '?' : this.rounds}!`)
+                .setDescription(
+                    `You have ${
+                        this.time / 1000
+                    } seconds to place your bet.\n**Please remember that the declare message has to follow the format '[start, end]' and contains nothing else.**\nIf you want to randomize your bet, use the letter \`r\` (E.g: \`[r, 69]\`).\nUpon successfully receiving your bet, I will react to your message with a ✅.\nYou can change your bet anytime before the timer ends. Your last bet will be your final choice.`
+                )
         );
         this.bets = new Collection<User, Array<number>>();
         const collector = this.channel.createMessageCollector(
@@ -214,15 +237,26 @@ export class Game {
                 end = Math.max(f, s);
             this.bets.set(this.client.user, [start, end]);
         }
-        const betsDisplay = this.bets.map((b, u) => `- **${u.tag}**: [${b.join(', ')}]`);
-        this.channel.send(`Time's up! Here are the bets:\n${betsDisplay.join('\n')}`);
+        // const betsDisplay = this.bets.map((b, u) => `${u}: [${b.join(', ')}]`);
+        const betsDisplay = this.client.util.presentTable([
+            ['PLAYERS', 'BETS'],
+            ...this.bets.map((b, u) => [u.tag, `[${b.join(', ')}]`]),
+        ]);
+        this.channel.send(
+            this.client.embeds
+                .default()
+                .setTitle(`Time's up! Here are the bets:`)
+                .setDescription(`\`\`\`${betsDisplay}\`\`\``)
+        );
         this.timer.reset(async () => {
             await this.pauseChamp();
         }, 1000);
     }
 
     async pauseChamp() {
-        const msg = await this.channel.send(`And the secret number is: ... PauseChamp`);
+        const msg = await this.channel.send(
+            this.client.embeds.default().setTitle(`And the secret number is: ... PauseChamp`)
+        );
         this.timer.reset(async () => {
             await this.announceSecretNumber(msg);
         }, 5000);
@@ -230,13 +264,16 @@ export class Game {
 
     async announceSecretNumber(message: Message) {
         const number = Math.floor(Math.random() * 101);
-        message.edit(`And the secret number is: ${number}!`);
+        if (message.deletable) await message.delete();
+        await message.channel.send(
+            this.client.embeds.default().setTitle(`And the secret number is: ${number}!`)
+        );
         this.timer.reset(() => {
-            this.calculateLeaderboard(number);
+            this.announceLeaderboard(number);
         }, 1000);
     }
 
-    calculateLeaderboard(number: number) {
+    async announceLeaderboard(number: number) {
         this.bets.forEach((b, u) => {
             const [start, end] = b;
             if (start <= number && number <= end) {
@@ -246,31 +283,36 @@ export class Game {
         });
         this.leaderboard.sort((a, b) => b - a);
         const userList = this.leaderboard.keyArray();
-        const leaderboard = this.leaderboard
+        /* const leaderboard = this.leaderboard
             .array()
-            .map((s, i) => `#${i + 1}. **${userList[i]}**: ${s} points. ${s >= 100 ? '👑' : ''}`);
-        this.timer.reset(async () => {
-            await this.announceLeaderboard(leaderboard);
-        }, 1000);
-    }
-
-    async announceLeaderboard(leaderboard: string[]) {
-        await this.channel.send('=================================');
+            .map((s, i) => `#${i + 1}. **${userList[i]}**: ${s} points. ${s >= 100 ? '👑' : ''}`)
+            .join('\n'); */
+        const firstPlaces = this.leaderboard.filter(s => s === this.leaderboard.first()).array().length;
+        const leaderboard = this.client.util.presentTable([
+            ['#', 'PLAYERS', 'POINTS'],
+            ...this.leaderboard
+                .array()
+                .map((s, i) => [`${s >= 100 && i < firstPlaces ? '👑' : `${i + 1}`}`, userList[i].tag, `${s}`]),
+        ]);
+        // await this.channel.send('=================================');
         await this.channel.send(
-            `Here's the leaderboard after this round:\n${leaderboard.join('\n')}`
+            this.client.embeds
+                .default()
+                .setTitle(`Here's the leaderboard after this round:`)
+                .setDescription(`\`\`\`${leaderboard}\`\`\``)
         );
         const winner = this.leaderboard.first() >= 100;
         if (winner) {
             this.ended = true;
             const firstPlase = this.leaderboard.first();
             const winners = this.leaderboard.filter(s => s === firstPlase).array();
-            let congrats = `Congratulations! The winner`;
+            let congrats = `The winner`;
             if (winners.length > 1)
                 congrats += `s are: ${winners.join(', ')} with ${firstPlase} points!`;
             else congrats += ` is: ${this.leaderboard.firstKey()} with ${firstPlase} points!`;
-            return this.channel.send(congrats);
+            return this.channel.send(this.client.embeds.default().setTitle('Congratulations!').setDescription(congrats));
         }
-        await this.channel.send('=================================');
+        // await this.channel.send('=================================');
         this.timer.reset(() => {
             this.round++;
             this.play();
@@ -278,16 +320,19 @@ export class Game {
     }
 
     play() {
-        if (this.round >= 5) {
+        if (this.round >= 5 || this.rounds === -1) {
             this.ended = true;
             const firstPlase = this.leaderboard.first();
-            if (firstPlase === 0) return this.channel.send('Unfortunately, no one won. Sadge');
+            if (firstPlase === 0)
+                return this.channel.send(
+                    this.client.embeds.default().setTitle('Unfortunately, no one won. Sadge')
+                );
             const winners = this.leaderboard.filter(s => s === firstPlase).array();
-            let congrats = `Congratulations! The winner`;
+            let congrats = `The winner`;
             if (winners.length > 1)
                 congrats += `s are: ${winners.join(', ')} with ${firstPlase} points!`;
             else congrats += ` is: ${this.leaderboard.firstKey()} with ${firstPlase} points!`;
-            return this.channel.send(congrats);
+            return this.channel.send(this.client.embeds.default().setTitle('Congratulations!').setDescription(congrats));
         }
         this.timer.reset(() => {
             this.collectBets();
